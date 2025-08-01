@@ -1,0 +1,221 @@
+<?php
+
+/**
+ * @file
+ * Contains static_content_type.module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function static_content_type_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    case 'help.page.static_content_type':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('The Static Content Type module provides a way to author and create content outside of the Drupal environment using any available tools and AI to create it.') . '</p>';
+      $output .= '<h3>' . t('Uses') . '</h3>';
+      $output .= '<dl>';
+      $output .= '<dt>' . t('Static Content Nodes') . '</dt>';
+      $output .= '<dd>' . t('Create content nodes that render HTML from static-content-nodes/[ID]/index.html') . '</dd>';
+      $output .= '<dt>' . t('Static Blocks') . '</dt>';
+      $output .= '<dd>' . t('Create blocks that render HTML from static-content-blocks/[ID]/index.html') . '</dd>';
+      $output .= '<dt>' . t('Static Paragraphs') . '</dt>';
+      $output .= '<dd>' . t('Create paragraphs that render HTML from static-content-paragraphs/[ID]/index.html') . '</dd>';
+      $output .= '</dl>';
+      return $output;
+
+    default:
+  }
+}
+
+/**
+ * Extract body content from full HTML documents.
+ *
+ * @param string $content
+ *   The HTML content to process.
+ *
+ * @return string
+ *   The body content or original content if no body tag found.
+ */
+function static_content_type_extract_body_content($content) {
+  // Check if this is a full HTML document with body tags
+  if (preg_match('/<body[^>]*>(.*?)<\/body>/is', $content, $matches)) {
+    return $matches[1];
+  }
+  
+  // If no body tag found, return original content
+  return $content;
+}
+
+/**
+ * Main loader function for static content.
+ *
+ * @param string|int $id
+ *   The ID of the entity or custom identifier.
+ * @param string $option
+ *   The rendering option: 'proxied', 'raw', or 'iframe'.
+ * @param string $location
+ *   The directory location in public files.
+ *
+ * @return array
+ *   A render array with the static content.
+ */
+function static_content_type_loader($id, $option = 'proxied', $location = 'static-content-nodes') {
+  $config = \Drupal::config('static_content_type.settings');
+  $file_system = \Drupal::service('file_system');
+  $logger = \Drupal::logger('static_content_type');
+  
+  \Drupal::logger('static_content_type')->notice("Loader called with ID: @id, option: @option, location: @location", [
+    '@id' => $id,
+    '@option' => $option, 
+    '@location' => $location
+  ]);
+  
+  // Get the configured option for this location type, fallback to passed option
+  $configured_option = $config->get($location . '_option') ?: $option;
+  
+  // Build the path to the index.html file
+  $public_path = $file_system->realpath('public://');
+  $content_path = $public_path . '/' . $location . '/' . $id . '/index.html';
+  
+  \Drupal::logger('static_content_type')->notice("Looking for file: @path", ['@path' => $content_path]);
+  
+  // Check if the file exists
+  if (!file_exists($content_path)) {
+    $current_user = \Drupal::currentUser();
+    
+    if ($current_user->hasPermission('administer static content type')) {
+      $error_message = t('Static content file not found: @path', ['@path' => $location . '/' . $id . '/index.html']);
+      $logger->error($error_message);
+      return [
+        '#markup' => '<div class="messages messages--error">' . $error_message . '</div>',
+      ];
+    }
+    else {
+      return [
+        '#markup' => '<div class="messages messages--status">' . t('Temporarily Unavailable') . '</div>',
+      ];
+    }
+  }
+  
+  // Get the content
+  $content = file_get_contents($content_path);
+  
+  if ($content === FALSE) {
+    $logger->error('Failed to read static content file: @path', ['@path' => $content_path]);
+    return [
+      '#markup' => '<div class="messages messages--error">' . t('Failed to load content') . '</div>',
+    ];
+  }
+  
+  \Drupal::logger('static_content_type')->notice("Successfully loaded content, length: @length", ['@length' => strlen($content)]);
+  
+  // Process based on the option
+  switch ($configured_option) {
+    case 'raw':
+      return [
+        '#markup' => $content,
+        '#allowed_tags' => static_content_type_get_allowed_tags(),
+      ];
+      
+    case 'iframe':
+      $base_url = \Drupal::request()->getSchemeAndHttpHost();
+      $public_url = $base_url . '/sites/default/files/' . $location . '/' . $id . '/index.html';
+      
+      return [
+        '#theme' => 'static_content_iframe',
+        '#src' => $public_url,
+        '#id' => $id,
+        '#location' => $location,
+      ];
+      
+    case 'proxied':
+    default:
+      // Process the content to fix relative paths
+      $processed_content = static_content_type_process_proxied_content($content, $location, $id);
+      
+      // Extract body content if it's a full HTML document
+      // Great option but for now return full html
+      // $processed_content = static_content_type_extract_body_content($processed_content);
+      
+      return [
+        '#markup' => $processed_content,
+        '#allowed_tags' => static_content_type_get_allowed_tags(),
+      ];
+  }
+}
+
+/**
+ * Process content for proxied rendering by fixing relative paths.
+ *
+ * @param string $content
+ *   The HTML content to process.
+ * @param string $location
+ *   The directory location.
+ * @param string|int $id
+ *   The entity ID.
+ *
+ * @return string
+ *   The processed HTML content.
+ */
+function static_content_type_process_proxied_content($content, $location, $id) {
+  $base_url = \Drupal::request()->getSchemeAndHttpHost();
+  $relative_path = '/sites/default/files/' . $location . '/' . $id . '/';
+  
+  // Replace relative src attributes
+  $content = preg_replace('/src="(?!http|\/\/)([^"]+)"/', 'src="' . $base_url . $relative_path . '$1"', $content);
+  
+  // Replace relative href attributes (but not anchors starting with #)
+  $content = preg_replace('/href="(?!http|\/\/|#)([^"]+)"/', 'href="' . $base_url . $relative_path . '$1"', $content);
+  
+  return $content;
+}
+
+/**
+ * Get allowed HTML tags for static content.
+ *
+ * @return array
+ *   Array of allowed HTML tags.
+ */
+function static_content_type_get_allowed_tags() {
+  return [
+    'a', 'abbr', 'address', 'area', 'article', 'aside', 'audio', 'b', 'base',
+    'bdi', 'bdo', 'blockquote', 'body', 'br', 'button', 'canvas', 'caption',
+    'cite', 'code', 'col', 'colgroup', 'data', 'datalist', 'dd', 'del',
+    'details', 'dfn', 'div', 'dl', 'dt', 'em', 'embed', 'fieldset',
+    'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5',
+    'h6', 'head', 'header', 'hr', 'html', 'i', 'iframe', 'img', 'input',
+    'ins', 'kbd', 'label', 'legend', 'li', 'link', 'main', 'map', 'mark',
+    'meta', 'meter', 'nav', 'noscript', 'object', 'ol', 'optgroup', 'option',
+    'output', 'p', 'param', 'picture', 'pre', 'progress', 'q', 'rp', 'rt',
+    'ruby', 's', 'samp', 'script', 'section', 'select', 'small', 'source',
+    'span', 'strong', 'style', 'sub', 'summary', 'sup', 'svg', 'table',
+    'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'time',
+    'title', 'tr', 'track', 'u', 'ul', 'var', 'video', 'wbr'
+  ];
+}
+
+/**
+ * Implements hook_theme().
+ */
+function static_content_type_theme($existing, $type, $theme, $path) {
+  return [
+    'static_content_type_node' => [
+      'variables' => [
+        'title' => NULL,
+        'body' => NULL,
+        'nid' => NULL,
+      ],
+    ],
+    'static_content_type_block' => [
+      'variables' => [
+        'heading' => NULL,
+        'content' => NULL,
+      ],
+    ],
+  ];
+}
+

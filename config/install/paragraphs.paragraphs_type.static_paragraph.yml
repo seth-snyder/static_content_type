@@ -1,0 +1,9 @@
+langcode: en
+status: true
+dependencies: {  }
+id: static_paragraph
+label: 'Static Paragraph'
+icon_uuid: null
+icon_default: null
+description: "A paragraph that is sourced from HTML content in your Drupal site's public files directory.\r\nTo create it, first set up a Static Paragraph and save it.\r\nHover over the edit link to find the paragraph ID.\r\n\r\nCreate a directory with that paragraph ID inside the static-content-paragraphs directory in your public files area."
+behavior_plugins: {  }

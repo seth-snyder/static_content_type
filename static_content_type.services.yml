@@ -1,0 +1,5 @@
+services:
+  static_content_type.twig_extension:
+    class: Drupal\static_content_type\TwigExtension\StaticContentTwigExtension
+    tags:
+      - { name: twig.extension }

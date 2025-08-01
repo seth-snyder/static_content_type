@@ -1,0 +1,7 @@
+langcode: en
+status: true
+dependencies: {  }
+id: static_block
+label: 'Static Block'
+revision: false
+description: "A block that is sourced from HTML content in your Drupal site's public files directory.\r\nTo create it, first set up an empty Static Block and assign a descriptive name.\r\nHover over the edit link to find the block ID.\r\nCreate a directory with that block ID inside the static-content-blocks directory in your public files area.\r\nFor example, if the block ID is 1234, the content should be placed in:\r\n\r\nstatic-content-blocks/1234/index.html"

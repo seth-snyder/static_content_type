@@ -1,0 +1,13 @@
+{#
+/**
+ * @file
+ * Template for the Static Content Nodes.
+ *
+ * Available variables:
+ * - nid: The content ID.
+ * ToDo SHOULD BE hardened
+ */
+#}
+<div class="static-content-node twig" data-id="{{ nid }}" data-location="{{ location }}">
+  {{ static_content_type_loader(nid, 'proxied', 'static-content-nodes') }}
+</div>

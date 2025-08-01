@@ -1,0 +1,42 @@
+static_content_type.settings:
+  type: config_object
+  label: 'Static Content Type settings'
+  mapping:
+    static_content_nodes_option:
+      type: string
+      label: 'Static content nodes rendering option'
+    static_content_blocks_option:
+      type: string  
+      label: 'Static content blocks rendering option'
+    static_content_paragraphs_option:
+      type: string
+      label: 'Static content paragraphs rendering option'
+    static_content_sdc_option:
+      type: string
+      label: 'Static content SDC rendering option'
+    static_content_twig_option:
+      type: string
+      label: 'Static content Twig rendering option'
+    static_content_pages_option:
+      type: string
+      label: 'Static content pages rendering option'
+    render_method:
+      type: string
+      label: 'Render Method'
+      description: 'Either "twig" or "php" to determine rendering strategy.'
+
+block.settings.static_block_plugin:
+  type: block_settings
+  label: 'Static Block'
+  mapping:
+    static_block_id:
+      type: string
+      label: 'Static Block ID'
+
+field.formatter.settings.static_paragraph:
+  type: mapping
+  label: 'Static paragraph formatter settings'
+  mapping:
+    view_mode:
+      type: string
+      label: 'View mode'

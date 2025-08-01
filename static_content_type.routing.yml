@@ -1,0 +1,18 @@
+static_content_type.view:
+  path: '/static-content/{nid}'
+  defaults:
+    _controller: '\Drupal\static_content_type\Controller\StaticContentTypeController::view'
+    _title: 'Static Content'
+  requirements:
+    _permission: 'access content'
+    nid: '\d+'
+  options:
+    no_cache: TRUE
+
+static_content_type.admin_settings:
+  path: '/admin/config/content/settings/static_content_type'
+  defaults:
+    _form: '\Drupal\static_content_type\Form\StaticContentTypeConfigForm'
+    _title: 'Static Content Type Settings'
+  requirements:
+    _permission: 'administer static content type'

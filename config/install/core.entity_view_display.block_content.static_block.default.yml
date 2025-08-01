@@ -1,0 +1,13 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - block_content.type.static_block
+id: block_content.static_block.default
+targetEntityType: block_content
+bundle: static_block
+mode: default
+content: {  }
+hidden:
+  langcode: true
+  search_api_excerpt: true

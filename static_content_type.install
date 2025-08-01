@@ -1,0 +1,102 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the static_content_type module.
+ */
+
+use Drupal\Core\File\FileSystemInterface;
+
+/**
+ * Implements hook_install().
+ */
+function static_content_type_install() {
+  $file_system = \Drupal::service('file_system');
+  $public_path = $file_system->realpath('public://');
+  
+  // Create the required directories
+  $directories = [
+    'static-content-nodes',
+    'static-content-blocks', 
+    'static-content-paragraphs',
+    'static-content-sdc',
+    'static-content-twig',
+    'static-content-pages',
+  ];
+  
+  foreach ($directories as $directory) {
+    $dir_path = $public_path . '/' . $directory;
+    if (!is_dir($dir_path)) {
+      $file_system->mkdir($dir_path, 0755, TRUE);
+      
+      // Create a README file in each directory
+      $readme_content = "This directory is used by the Static Content Type module.\n\n";
+      $readme_content .= "Place your static HTML content in numbered subdirectories.\n";
+      $readme_content .= "For example: {$directory}/1234/index.html\n\n";
+      $readme_content .= "The number should correspond to the entity ID from Drupal.\n";
+      
+      file_put_contents($dir_path . '/README.txt', $readme_content);
+    }
+  }
+  
+  \Drupal::messenger()->addMessage(t('Static Content Type module installed. Directory structure created in public files.'));
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function static_content_type_uninstall() {
+  // Remove configuration
+  \Drupal::configFactory()->getEditable('static_content_type.settings')->delete();
+  
+  \Drupal::messenger()->addMessage(t('Static Content Type module uninstalled. Static content directories and files remain in public files.'));
+}
+
+/**
+ * Implements hook_requirements().
+ */
+function static_content_type_requirements($phase) {
+  $requirements = [];
+  
+  if ($phase == 'runtime') {
+    $file_system = \Drupal::service('file_system');
+    $public_path = $file_system->realpath('public://');
+    
+    $directories = [
+      'static-content-nodes',
+      'static-content-blocks', 
+      'static-content-paragraphs',
+      'static-content-sdc',
+      'static-content-twig',
+      'static-content-pages',
+    ];
+    
+    $missing_directories = [];
+    foreach ($directories as $directory) {
+      $dir_path = $public_path . '/' . $directory;
+      if (!is_dir($dir_path)) {
+        $missing_directories[] = $directory;
+      }
+    }
+    
+    if (!empty($missing_directories)) {
+      $requirements['static_content_type_directories'] = [
+        'title' => t('Static Content Type Directories'),
+        'value' => t('Missing directories'),
+        'description' => t('The following directories are missing from public files: @directories. They should be recreated automatically, but you may need to create them manually.', [
+          '@directories' => implode(', ', $missing_directories),
+        ]),
+        'severity' => REQUIREMENT_WARNING,
+      ];
+    }
+    else {
+      $requirements['static_content_type_directories'] = [
+        'title' => t('Static Content Type Directories'),
+        'value' => t('All directories present'),
+        'severity' => REQUIREMENT_OK,
+      ];
+    }
+  }
+  
+  return $requirements;
+}

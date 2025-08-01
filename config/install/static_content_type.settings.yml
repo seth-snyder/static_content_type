@@ -1,0 +1,6 @@
+static_content_nodes_option: 'proxied'
+static_content_blocks_option: 'proxied'
+static_content_paragraphs_option: 'proxied'
+static_content_sdc_option: 'proxied'
+static_content_twig_option: 'proxied'
+static_content_pages_option: 'proxied'

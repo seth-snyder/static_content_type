@@ -1,0 +1,35 @@
+name: 'Static Content'
+status: true
+group: 'Static Content'
+description: 'Renders static HTML content from the public files directory'
+props:
+  type: object
+  properties:
+    id:
+      type: string
+      title: 'Content ID'
+      description: 'The ID of the directory containing the static content'
+      examples:
+        - '1234'
+        - 'my-custom-content'
+    option:
+      type: string
+      title: 'Rendering Option'
+      description: 'How to render the content'
+      enum:
+        - 'proxied'
+        - 'raw'
+        - 'iframe'
+      default: 'proxied'
+    location:
+      type: string
+      title: 'Directory Location'
+      description: 'The directory location in public files'
+      enum:
+        - 'static-content-nodes'
+        - 'static-content-blocks'
+        - 'static-content-paragraphs'
+        - 'static-content-sdc'
+        - 'static-content-twig'
+        - 'static-content-pages'
+      default: 'static-content-sdc'

@@ -1,0 +1,14 @@
+{#
+/**
+ * @file
+ * Template for the Static Content SDC component.
+ *
+ * Available variables:
+ * - id: The content ID.
+ * - option: The rendering option (proxied, raw, iframe).
+ * - location: The directory location.
+ */
+#}
+<div class="static-content-sdc" data-id="{{ id }}" data-location="{{ location }}">
+  {{ static_content_type_loader(id, option, location) }}
+</div>
