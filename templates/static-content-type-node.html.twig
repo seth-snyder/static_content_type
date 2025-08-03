@@ -5,9 +5,37 @@
  *
  * Available variables:
  * - nid: The content ID.
- * ToDo SHOULD BE hardened
+ * - title: The node title.
+ * - body: The node body (description).
+ * - location: The directory location.
  */
 #}
-<div class="static-content-node twig" data-id="{{ nid }}" data-location="{{ location }}">
-  {{ static_content_type_loader(nid, 'proxied', 'static-content-nodes') }}
-</div>
+<article class="static-content-node" data-id="{{ nid }}" data-location="{{ location }}">
+  {% if title %}
+    <header class="static-content-header">
+      <h1>{{ title }}</h1>
+    </header>
+  {% endif %}
+  
+  <div class="static-content-debug">
+    <p><strong>Debug Info:</strong></p>
+    <ul>
+      <li>Node ID: {{ nid }}</li>
+      <li>Location: {{ location }}</li>
+      <li>Title: {{ title }}</li>
+    </ul>
+  </div>
+  
+  <div class="static-content-body">
+    {# Use the raw function to inject HTML directly without render arrays #}
+    {% set raw_content = static_content_raw(nid, location) %}
+    {% if raw_content %}
+      {{ raw_content }}
+    {% else %}
+      <p style="color: red; background: yellow; padding: 10px;">
+        <strong>ERROR:</strong> static_content_raw({{ nid }}, {{ location }}) returned empty content.<br>
+        Checking: files/{{ location }}/{{ nid }}/
+      </p>
+    {% endif %}
+  </div>
+</article>

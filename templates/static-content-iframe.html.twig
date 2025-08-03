@@ -9,7 +9,7 @@
  * - location: The directory location.
  */
 #}
-<div class="static-content-iframe-wrapper">
+<div class="static-content-iframe-wrapper" data-id="{{ id }}" data-location="{{ location }}">
   <iframe 
     src="{{ src }}" 
     width="100%" 
@@ -18,7 +18,8 @@
     scrolling="auto"
     class="static-content-iframe"
     data-static-id="{{ id }}"
-    data-static-location="{{ location }}">
+    data-static-location="{{ location }}"
+    title="Static Content {{ id }}">
     <p>{{ 'Your browser does not support iframes.'|t }}</p>
   </iframe>
 </div>
@@ -38,6 +39,7 @@
           doc.documentElement.offsetHeight
         );
         iframe.style.height = height + 'px';
+        console.log('iFrame resized to: ' + height + 'px');
       }
     } catch (e) {
       // Cross-origin restrictions or other errors
@@ -47,8 +49,12 @@
 
   // Find and resize iframes
   var iframes = document.querySelectorAll('.static-content-iframe');
+  console.log('Found ' + iframes.length + ' static content iframes');
+  
   iframes.forEach(function(iframe) {
+    console.log('Setting up iframe with src:', iframe.src);
     iframe.addEventListener('load', function() {
+      console.log('iFrame loaded, attempting resize');
       resizeIframe(iframe);
     });
   });

@@ -5,10 +5,17 @@
  *
  * Available variables:
  * - id: The content ID.
- * - option: The rendering option (proxied, raw, iframe).
+ * - option: The rendering option (proxied, raw, hardened, iframe).
  * - location: The directory location.
  */
 #}
-<div class="static-content-sdc" data-id="{{ id }}" data-location="{{ location }}">
-  {{ static_content_type_loader(id, option, location) }}
-</div>
+{% if id %}
+  <div class="static-content-sdc" data-id="{{ id }}" data-location="{{ location }}">
+    {{ static_content_type_loader(id, option, location) }}
+  </div>
+{% else %}
+  <div class="static-content-sdc-error" style="padding: 20px; border: 1px solid red; background: #ffe6e6;">
+    <strong>Error:</strong> No 'id' provided to Static Content component.<br>
+    Usage: <code>{{ include('static_content_type:static_content', { id: 'your-content-id' }) }}</code>
+  </div>
+{% endif %}

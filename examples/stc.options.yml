@@ -1,0 +1,15 @@
+
+# Example stc.options.yml file
+# Place in: files/static-content-nodes/1234/stc.options.yml
+
+# Override global render method for this specific content
+render_method: 'iframe'  # 'php', 'twig', or 'iframe'
+
+# Override processing type (optional, usually determined by subdirectory)
+processing_type: 'raw'   # 'raw', 'proxied', 'hardened'
+
+# Custom settings (for future use)
+custom_settings:
+  use_drupal_react: true
+  iframe_height: '800px'
+  security_level: 'high'

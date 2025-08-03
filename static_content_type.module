@@ -149,6 +149,317 @@ function static_content_type_loader($id, $option = 'proxied', $location = 'stati
 }
 
 /**
+ * Enhanced loader function with proper asset handling.
+ */
+function static_content_type_loader_enhanced($id, $processing_type = 'hardened', $location = 'static-content-nodes', $file_path = null) {
+  $logger = \Drupal::logger('static_content_type');
+  $config = \Drupal::config('static_content_type.settings');
+  
+  // If no file path provided, use the original loader
+  if (!$file_path) {
+    return static_content_type_loader($id, $processing_type, $location);
+  }
+  
+  // Get the content
+  $content = file_get_contents($file_path);
+  
+  if ($content === FALSE) {
+    $logger->error('Failed to read static content file: @path', ['@path' => $file_path]);
+    return [
+      '#markup' => '<div class="messages messages--error">' . t('Failed to load content') . '</div>',
+    ];
+  }
+  
+  \Drupal::logger('static_content_type')->notice("Enhanced loader: ID @id, type @type, file @file", [
+    '@id' => $id,
+    '@type' => $processing_type,
+    '@file' => basename($file_path),
+  ]);
+  
+  // Build base render array
+  $build = [];
+  
+  // Add Drupal React library if configured
+  if ($config->get('use_drupal_react')) {
+    $build['#attached']['library'][] = 'core/react';
+  }
+  
+  // Process based on the type
+  switch ($processing_type) {
+    case 'raw':
+      $build['#markup'] = $content;
+      $build['#allowed_tags'] = static_content_type_get_allowed_tags();
+      break;
+      
+    case 'iframe':
+      $base_url = \Drupal::request()->getSchemeAndHttpHost();
+      $relative_path = str_replace(\Drupal::service('file_system')->realpath('public://') . '/', '', dirname($file_path));
+      $public_url = $base_url . '/sites/default/files/' . $relative_path . '/index.html';
+      
+      $build = [
+        '#theme' => 'static_content_iframe',
+        '#src' => $public_url,
+        '#id' => $id,
+        '#location' => $location,
+      ];
+      break;
+      
+    case 'proxied':
+      // Process the content to fix relative paths
+      $processed_content = static_content_type_process_proxied_content($content, $location, $id);
+      $build['#markup'] = $processed_content;
+      $build['#allowed_tags'] = static_content_type_get_allowed_tags();
+      break;
+      
+    case 'hardened':
+    default:
+      // Use hardened processing
+      $processed_content = static_content_type_process_hardened_content($content, $location, $id);
+      $build['#markup'] = $processed_content;
+      $build['#allowed_tags'] = static_content_type_get_allowed_tags();
+      
+      // Get any extracted assets and attach them
+      $assets = static_content_type_get_temp_assets($id, $location);
+      if (!empty($assets)) {
+        // Attach CSS files
+        foreach ($assets['css'] as $css_url) {
+          $build['#attached']['html_head'][] = [
+            [
+              '#tag' => 'link',
+              '#attributes' => [
+                'rel' => 'stylesheet',
+                'href' => $css_url,
+              ],
+            ],
+            'static_content_css_' . md5($css_url),
+          ];
+        }
+        
+        // Attach JS files
+        foreach ($assets['js'] as $js_url) {
+          $build['#attached']['html_head'][] = [
+            [
+              '#tag' => 'script',
+              '#attributes' => [
+                'src' => $js_url,
+              ],
+            ],
+            'static_content_js_' . md5($js_url),
+          ];
+        }
+        
+        // Attach inline CSS
+        foreach ($assets['inline_css'] as $index => $inline_css) {
+          $build['#attached']['html_head'][] = [
+            [
+              '#tag' => 'style',
+              '#value' => $inline_css,
+            ],
+            'static_content_inline_css_' . $id . '_' . $index,
+          ];
+        }
+        
+        // Attach inline JS
+        foreach ($assets['inline_js'] as $index => $inline_js) {
+          $build['#attached']['html_head'][] = [
+            [
+              '#tag' => 'script',
+              '#value' => $inline_js,
+            ],
+            'static_content_inline_js_' . $id . '_' . $index,
+          ];
+        }
+      }
+      break;
+  }
+  
+  return $build;
+}
+
+/**
+ * Process content with hardened security - FIXED to preserve CSS/JS.
+ *
+ * @param string $content
+ *   The HTML content to process.
+ * @param string $location
+ *   The directory location.
+ * @param string|int $id
+ *   The entity ID.
+ *
+ * @return string
+ *   The processed HTML content.
+ */
+function static_content_type_process_hardened_content($content, $location, $id) {
+  // Apply proxied processing first (fixes paths)
+  $processed_content = static_content_type_process_proxied_content($content, $location, $id);
+  
+  // Check if this is a full HTML document
+  if (preg_match('/<html[^>]*>/i', $processed_content)) {
+    // Extract and preserve head assets BEFORE extracting body
+    $head_assets = static_content_type_extract_head_assets($processed_content);
+    
+    // Now extract body content
+    $body_content = static_content_type_extract_body_content($processed_content);
+    
+    // If we found head assets, we need to return a render array instead of just markup
+    // This is a bit tricky - we'll store the assets for later use
+    static_content_type_store_temp_assets($id, $location, $head_assets);
+    
+    return $body_content;
+  }
+  
+  // Not a full HTML document, return as-is
+  return $processed_content;
+}
+
+/**
+ * Extract CSS and JS assets from HTML head.
+ */
+function static_content_type_extract_head_assets($content) {
+  $assets = ['css' => [], 'js' => [], 'inline_css' => [], 'inline_js' => []];
+  
+  // Extract CSS files
+  if (preg_match_all('/<link[^>]+href=["\']([^"\']+\.css)["\'][^>]*>/i', $content, $css_matches)) {
+    foreach ($css_matches[1] as $css_url) {
+      $assets['css'][] = $css_url;
+    }
+  }
+  
+  // Extract JS files
+  if (preg_match_all('/<script[^>]+src=["\']([^"\']+\.js)["\'][^>]*><\/script>/i', $content, $js_matches)) {
+    foreach ($js_matches[1] as $js_url) {
+      $assets['js'][] = $js_url;
+    }
+  }
+  
+  // Extract inline CSS
+  if (preg_match_all('/<style[^>]*>(.*?)<\/style>/is', $content, $style_matches)) {
+    foreach ($style_matches[1] as $inline_css) {
+      $assets['inline_css'][] = trim($inline_css);
+    }
+  }
+  
+  // Extract inline JS
+  if (preg_match_all('/<script[^>]*>(.*?)<\/script>/is', $content, $script_matches)) {
+    foreach ($script_matches[0] as $index => $full_script) {
+      // Only process scripts without src attribute (inline scripts)
+      if (strpos($full_script, 'src=') === false) {
+        $assets['inline_js'][] = trim($script_matches[1][$index]);
+      }
+    }
+  }
+  
+  return $assets;
+}
+
+/**
+ * Store extracted assets temporarily for later attachment.
+ */
+function static_content_type_store_temp_assets($id, $location, $assets) {
+  $temp_storage = &drupal_static(__FUNCTION__, []);
+  $key = $location . '_' . $id;
+  $temp_storage[$key] = $assets;
+}
+
+/**
+ * Get stored assets for attachment.
+ */
+function static_content_type_get_temp_assets($id, $location) {
+  $temp_storage = &drupal_static('static_content_type_store_temp_assets', []);
+  $key = $location . '_' . $id;
+  return isset($temp_storage[$key]) ? $temp_storage[$key] : [];
+}
+
+/**
+ * Fixed raw Twig extension function using enhanced processing.
+ *
+ * @param string|int $id
+ *   The ID of the entity or custom identifier.
+ * @param string $location
+ *   The directory location in public files.
+ *
+ * @return \Twig\Markup
+ *   Raw HTML markup for Twig templates.
+ */
+function static_content_type_loader_raw($id, $location = 'static-content-nodes') {
+  $file_system = \Drupal::service('file_system');
+  $public_path = $file_system->realpath('public://');
+  $config = \Drupal::config('static_content_type.settings');
+  
+  // Use the same precedence system as the controller
+  $precedence = ['dist', 'build', 'raw', 'proxied', 'hardened', 'src', ''];
+  $base_path = $public_path . '/' . $location . '/' . $id;
+  
+  \Drupal::logger('static_content_type')->notice("Twig raw function searching for @id in @location", [
+    '@id' => $id,
+    '@location' => $location,
+  ]);
+  
+  foreach ($precedence as $subdir) {
+    $check_path = $subdir ? $base_path . '/' . $subdir : $base_path;
+    $index_file = $check_path . '/index.html';
+    
+    if (file_exists($index_file)) {
+      $content = file_get_contents($index_file);
+      
+      if ($content !== FALSE) {
+        \Drupal::logger('static_content_type')->notice("Twig raw found content in @subdir subdir", [
+          '@subdir' => $subdir ?: 'root'
+        ]);
+        
+        // Process based on subdirectory type using the same logic as controller
+        switch ($subdir) {
+          case 'raw':
+            // No processing for raw - this is why images don't work in raw
+            \Drupal::logger('static_content_type')->notice("Twig raw: No processing for raw directory");
+            break;
+            
+          case 'proxied':
+          case 'src':
+            \Drupal::logger('static_content_type')->notice("Twig raw: Proxied processing for @subdir", ['@subdir' => $subdir]);
+            $content = static_content_type_process_proxied_content_enhanced($content, $location, $id, $subdir);
+            break;
+            
+          case 'dist':
+          case 'build':
+            // Use config default for bundled content
+            $default_processing = $config->get('default_processing') ?: 'hardened';
+            \Drupal::logger('static_content_type')->notice("Twig raw: Bundled content using @processing", [
+              '@processing' => $default_processing
+            ]);
+            
+            if ($default_processing === 'hardened') {
+              $content = static_content_type_process_hardened_content_enhanced($content, $location, $id, $subdir);
+            } elseif ($default_processing === 'proxied') {
+              $content = static_content_type_process_proxied_content_enhanced($content, $location, $id, $subdir);
+            }
+            // 'raw' falls through with no processing
+            break;
+            
+          case 'hardened':
+          case '': // root
+          default:
+            \Drupal::logger('static_content_type')->notice("Twig raw: Hardened processing for @subdir", [
+              '@subdir' => $subdir ?: 'root'
+            ]);
+            $content = static_content_type_process_hardened_content_enhanced($content, $location, $id, $subdir);
+            break;
+        }
+        
+        return new \Twig\Markup($content, 'UTF-8');
+      }
+    }
+  }
+  
+  \Drupal::logger('static_content_type')->error("Twig raw: No content found for @id in @location", [
+    '@id' => $id,
+    '@location' => $location,
+  ]);
+  
+  return new \Twig\Markup('<p style="color: red;">Static content not found for ' . $id . ' in ' . $location . '</p>', 'UTF-8');
+}
+
+/**
  * Process content for proxied rendering by fixing relative paths.
  *
  * @param string $content
@@ -172,6 +483,202 @@ function static_content_type_process_proxied_content($content, $location, $id) {
   $content = preg_replace('/href="(?!http|\/\/|#)([^"]+)"/', 'href="' . $base_url . $relative_path . '$1"', $content);
   
   return $content;
+}
+
+/**
+ * enhanced process content for proxied rendering - handles subdirectories.
+ *
+ * @param string $content
+ *   The HTML content to process.
+ * @param string $location
+ *   The directory location.
+ * @param string|int $id
+ *   The entity ID.
+ * @param string $subdirectory
+ *   The subdirectory where content was found.
+ *
+ * @return string
+ *   The processed HTML content.
+ */
+function static_content_type_process_proxied_content_enhanced($content, $location, $id, $subdirectory = '') {
+  $base_url = \Drupal::request()->getSchemeAndHttpHost();
+  $relative_path = '/sites/default/files/' . $location . '/' . $id . '/';
+  
+  // Only add subdirectory to path if it's not 'root' and not empty
+  if ($subdirectory && $subdirectory !== 'root') {
+    $relative_path .= $subdirectory . '/';
+  }
+  
+  \Drupal::logger('static_content_type')->notice("Processing paths with base: @path (subdirectory: @subdir)", [
+    '@path' => $relative_path,
+    '@subdir' => $subdirectory ?: 'none'
+  ]);
+  
+  // Replace relative src attributes (images, scripts, etc.)
+  $content = preg_replace('/src="(?!http|\/\/|data:)([^"]+)"/', 'src="' . $base_url . $relative_path . '$1"', $content);
+  
+  // Replace relative href attributes (stylesheets, links - but not anchors starting with #)
+  $content = preg_replace('/href="(?!http|\/\/|#|mailto:)([^"]+)"/', 'href="' . $base_url . $relative_path . '$1"', $content);
+  
+  // Also handle single quotes
+  $content = preg_replace("/src='(?!http|\/\/|data:)([^']+)'/", "src='" . $base_url . $relative_path . "$1'", $content);
+  $content = preg_replace("/href='(?!http|\/\/|#|mailto:)([^']+)'/", "href='" . $base_url . $relative_path . "$1'", $content);
+  
+  return $content;
+}
+
+/**
+ * Update the main enhanced loader to use subdirectory-aware processing.
+ */
+function static_content_type_loader_enhanced_v2($id, $processing_type = 'hardened', $location = 'static-content-nodes', $file_path = null, $subdirectory = '') {
+  $logger = \Drupal::logger('static_content_type');
+  $config = \Drupal::config('static_content_type.settings');
+  
+  // If no file path provided, use the original loader
+  if (!$file_path) {
+    return static_content_type_loader($id, $processing_type, $location);
+  }
+  
+  // Get the content
+  $content = file_get_contents($file_path);
+  
+  if ($content === FALSE) {
+    $logger->error('Failed to read static content file: @path', ['@path' => $file_path]);
+    return [
+      '#markup' => '<div class="messages messages--error">' . t('Failed to load content') . '</div>',
+    ];
+  }
+  
+  \Drupal::logger('static_content_type')->notice("Enhanced loader v2: ID @id, type @type, subdir @subdir, file @file", [
+    '@id' => $id,
+    '@type' => $processing_type,
+    '@subdir' => $subdirectory,
+    '@file' => basename($file_path),
+  ]);
+  
+  // Build base render array
+  $build = [];
+  
+  // Add Drupal React library if configured
+  if ($config->get('use_drupal_react')) {
+    $build['#attached']['library'][] = 'core/react';
+  }
+  
+  // Process based on the type
+  switch ($processing_type) {
+    case 'raw':
+      $build['#markup'] = $content;
+      $build['#allowed_tags'] = static_content_type_get_allowed_tags();
+      break;
+      
+    case 'iframe':
+      $base_url = \Drupal::request()->getSchemeAndHttpHost();
+      $relative_path = str_replace(\Drupal::service('file_system')->realpath('public://') . '/', '', dirname($file_path));
+      $public_url = $base_url . '/sites/default/files/' . $relative_path . '/index.html';
+      
+      $build = [
+        '#theme' => 'static_content_iframe',
+        '#src' => $public_url,
+        '#id' => $id,
+        '#location' => $location,
+      ];
+      break;
+      
+    case 'proxied':
+      // Use enhanced processing with subdirectory awareness
+      $processed_content = static_content_type_process_proxied_content_enhanced($content, $location, $id, $subdirectory);
+      $build['#markup'] = $processed_content;
+      $build['#allowed_tags'] = static_content_type_get_allowed_tags();
+      break;
+      
+    case 'hardened':
+    default:
+      // Use hardened processing with subdirectory awareness
+      $processed_content = static_content_type_process_hardened_content_enhanced($content, $location, $id, $subdirectory);
+      $build['#markup'] = $processed_content;
+      $build['#allowed_tags'] = static_content_type_get_allowed_tags();
+      
+      // Get any extracted assets and attach them
+      $assets = static_content_type_get_temp_assets($id, $location);
+      if (!empty($assets)) {
+        // Attach CSS files
+        foreach ($assets['css'] as $css_url) {
+          $build['#attached']['html_head'][] = [
+            [
+              '#tag' => 'link',
+              '#attributes' => [
+                'rel' => 'stylesheet',
+                'href' => $css_url,
+              ],
+            ],
+            'static_content_css_' . md5($css_url),
+          ];
+        }
+        
+        // Attach JS files
+        foreach ($assets['js'] as $js_url) {
+          $build['#attached']['html_head'][] = [
+            [
+              '#tag' => 'script',
+              '#attributes' => [
+                'src' => $js_url,
+              ],
+            ],
+            'static_content_js_' . md5($js_url),
+          ];
+        }
+        
+        // Attach inline CSS
+        foreach ($assets['inline_css'] as $index => $inline_css) {
+          $build['#attached']['html_head'][] = [
+            [
+              '#tag' => 'style',
+              '#value' => $inline_css,
+            ],
+            'static_content_inline_css_' . $id . '_' . $index,
+          ];
+        }
+        
+        // Attach inline JS
+        foreach ($assets['inline_js'] as $index => $inline_js) {
+          $build['#attached']['html_head'][] = [
+            [
+              '#tag' => 'script',
+              '#value' => $inline_js,
+            ],
+            'static_content_inline_js_' . $id . '_' . $index,
+          ];
+        }
+      }
+      break;
+  }
+  
+  return $build;
+}
+
+/**
+ * Enhanced hardened processing with subdirectory support.
+ */
+function static_content_type_process_hardened_content_enhanced($content, $location, $id, $subdirectory = '') {
+  // Apply enhanced proxied processing first (now fixed for root directory)
+  $processed_content = static_content_type_process_proxied_content_enhanced($content, $location, $id, $subdirectory);
+  
+  // Check if this is a full HTML document
+  if (preg_match('/<html[^>]*>/i', $processed_content)) {
+    // Extract and preserve head assets BEFORE extracting body
+    $head_assets = static_content_type_extract_head_assets($processed_content);
+    
+    // Now extract body content
+    $body_content = static_content_type_extract_body_content($processed_content);
+    
+    // Store the assets for later use
+    static_content_type_store_temp_assets($id, $location, $head_assets);
+    
+    return $body_content;
+  }
+  
+  // Not a full HTML document, return as-is
+  return $processed_content;
 }
 
 /**
@@ -208,6 +715,7 @@ function static_content_type_theme($existing, $type, $theme, $path) {
         'title' => NULL,
         'body' => NULL,
         'nid' => NULL,
+        'location' => NULL,
       ],
     ],
     'static_content_type_block' => [
@@ -216,6 +724,212 @@ function static_content_type_theme($existing, $type, $theme, $path) {
         'content' => NULL,
       ],
     ],
+    'static_content_iframe' => [
+      'variables' => [
+        'src' => NULL,
+        'id' => NULL,
+        'location' => NULL,
+      ],
+      'template' => 'static-content-iframe',
+    ],
+  ];
+}
+
+
+/**
+ * Implements hook_entity_view_alter() for paragraphs and blocks.
+ */
+function static_content_type_entity_view_alter(array &$build, \Drupal\Core\Entity\EntityInterface $entity, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display) {
+  
+  // Handle static paragraphs with safety checks
+  if ($entity->getEntityTypeId() === 'paragraph' && $entity->bundle() === 'static_paragraph') {
+    // Safety check - make sure entity is fully loaded
+    if (!$entity || !$entity->id()) {
+      \Drupal::logger('static_content_type')->error("Invalid paragraph entity passed to hook");
+      return;
+    }
+    
+    $id = $entity->id();
+    \Drupal::logger('static_content_type')->notice("Processing static paragraph @id", ['@id' => $id]);
+    
+    // Get config for render method
+    $config = \Drupal::config('static_content_type.settings');
+    $render_method = $config->get('render_method') ?: 'php';
+    
+    if ($render_method === 'php') {
+      // Preserve essential metadata but replace content
+      $essential_metadata = [];
+      foreach ($build as $key => $value) {
+        if (strpos($key, '#') === 0) {
+          $essential_metadata[$key] = $value;
+        }
+      }
+      
+      // Add required metadata for paragraphs
+      $essential_metadata['#paragraph'] = $entity;
+      $essential_metadata['#view_mode'] = $display->getMode();
+      $essential_metadata['#theme'] = 'paragraph';
+      
+      // Clear and rebuild
+      $build = $essential_metadata;
+      $build['static_content'] = static_content_type_loader_with_precedence($id, 'static-content-paragraphs');
+      $build['#cache']['tags'][] = 'paragraph:' . $id;
+    }
+  }
+  
+  // Handle static blocks with safety checks
+  elseif ($entity->getEntityTypeId() === 'block_content' && $entity->bundle() === 'static_block') {
+    // Safety check - make sure entity is fully loaded
+    if (!$entity || !$entity->id()) {
+      \Drupal::logger('static_content_type')->error("Invalid block entity passed to hook");
+      return;
+    }
+    
+    $id = $entity->id();
+    \Drupal::logger('static_content_type')->notice("Processing static block @id", ['@id' => $id]);
+    
+    // Get config for render method
+    $config = \Drupal::config('static_content_type.settings');
+    $render_method = $config->get('render_method') ?: 'php';
+    
+    if ($render_method === 'php') {
+      // Preserve essential metadata but replace content
+      $essential_metadata = [];
+      foreach ($build as $key => $value) {
+        if (strpos($key, '#') === 0) {
+          $essential_metadata[$key] = $value;
+        }
+      }
+      
+      // Clear and rebuild
+      $build = $essential_metadata;
+      $build['static_content'] = static_content_type_loader_with_precedence($id, 'static-content-blocks');
+      $build['#cache']['tags'][] = 'block_content:' . $id;
+    }
+  }
+}
+
+/**
+ * A helper function to use helpful errors.
+ */
+function static_content_type_loader_with_precedence($id, $location) {
+  $file_system = \Drupal::service('file_system');
+  $public_path = $file_system->realpath('public://');
+  $base_path = $public_path . '/' . $location . '/' . $id;
+  
+  // Directory precedence order
+  $precedence = ['dist', 'build', 'raw', 'proxied', 'hardened', 'src', ''];
+  
+  \Drupal::logger('static_content_type')->notice("Helper searching for @id in @location", [
+    '@id' => $id,
+    '@location' => $location,
+  ]);
+  
+  foreach ($precedence as $subdir) {
+    $check_path = $subdir ? $base_path . '/' . $subdir : $base_path;
+    $index_file = $check_path . '/index.html';
+    
+    if (file_exists($index_file)) {
+      $file_info = [
+        'full_path' => $index_file,
+        'subdirectory' => $subdir ?: 'root',
+        'relative_path' => $location . '/' . $id . ($subdir ? '/' . $subdir : '') . '/index.html',
+      ];
+      
+      // Get processing type
+      $processing_type = static_content_type_get_processing_type_for_subdir($file_info['subdirectory']);
+      
+      \Drupal::logger('static_content_type')->notice("Helper function loading @id from @subdir with @type processing", [
+        '@id' => $id,
+        '@subdir' => $file_info['subdirectory'],
+        '@type' => $processing_type,
+      ]);
+      
+      // Use enhanced loader with subdirectory info
+      return static_content_type_loader_enhanced_v2(
+        $id, 
+        $processing_type, 
+        $location, 
+        $file_info['full_path'],
+        $file_info['subdirectory']  // Pass subdirectory for path processing
+      );
+    }
+  }
+  
+  // No content found - return helpful error
+  \Drupal::logger('static_content_type')->notice("Helper: No content found for @id in @location", [
+    '@id' => $id,
+    '@location' => $location,
+  ]);
+  
+  return static_content_type_create_helpful_error($id, $location);
+}
+
+
+/**
+ * Get processing type based on subdirectory.
+ */
+function static_content_type_get_processing_type_for_subdir($subdirectory) {
+  $config = \Drupal::config('static_content_type.settings');
+  
+  switch ($subdirectory) {
+    case 'raw':
+      return 'raw';
+    case 'proxied':
+    case 'src':
+      return 'proxied';
+    case 'dist':
+    case 'build':
+      // Use config default for bundled content
+      return $config->get('default_processing') ?: 'hardened';
+    case 'hardened':
+    case 'root':
+    default:
+      return 'hardened';
+  }
+}
+
+/**
+ * A helper function to use helpful errors.
+ */
+function static_content_type_create_helpful_error($id, $location) {
+  $file_system = \Drupal::service('file_system');
+  $public_path = $file_system->realpath('public://');
+  $directory_path = '/sites/default/files/' . $location . '/' . $id;
+  
+  $error_html = '
+    <div class="static-content-type-message" style="border: solid 1px black; display: inline-block; margin: 10px 0;">
+      <div style="border: solid 2px white; font-family: Arial, Helvetica, sans-serif;">
+        <div style="border: solid 1px red; padding: 20px; background-color: #fff2f2;">
+          <div style="font-weight: bold; text-align: center; margin-bottom: 10px; color: #d8000c;">
+            📁 Static Content Not Found
+          </div>
+          <div style="margin-bottom: 10px;">
+            <strong>Entity ID:</strong> ' . htmlspecialchars($id) . '<br>
+            <strong>Location:</strong> ' . htmlspecialchars($location) . '
+          </div>
+          <div style="margin-bottom: 10px;">
+            <strong>Looking for index.html in:</strong>
+          </div>
+          <div style="font-family: monospace; background-color: #f5f5f5; padding: 10px; border: 1px solid #ccc;">
+            ' . htmlspecialchars($directory_path) . '/dist/<br>
+            ' . htmlspecialchars($directory_path) . '/build/<br>
+            ' . htmlspecialchars($directory_path) . '/raw/<br>
+            ' . htmlspecialchars($directory_path) . '/proxied/<br>
+            ' . htmlspecialchars($directory_path) . '/hardened/<br>
+            ' . htmlspecialchars($directory_path) . '/src/<br>
+            ' . htmlspecialchars($directory_path) . '/
+          </div>
+          <div style="margin-top: 10px; font-size: 0.9em; color: #666;">
+            💡 Create any of these directories and add an index.html file to get started.
+          </div>
+        </div>
+      </div>
+    </div>';
+  
+  return [
+    '#markup' => $error_html,
+    '#allowed_tags' => ['div', 'strong', 'br'],
   ];
 }
 

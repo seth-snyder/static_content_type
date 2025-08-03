@@ -4,6 +4,8 @@ group: 'Static Content'
 description: 'Renders static HTML content from the public files directory'
 props:
   type: object
+  required:
+    - id
   properties:
     id:
       type: string
@@ -12,6 +14,7 @@ props:
       examples:
         - '1234'
         - 'my-custom-content'
+        - 'sdc-content'
     option:
       type: string
       title: 'Rendering Option'
@@ -19,8 +22,9 @@ props:
       enum:
         - 'proxied'
         - 'raw'
+        - 'hardened'
         - 'iframe'
-      default: 'proxied'
+      default: 'hardened'
     location:
       type: string
       title: 'Directory Location'
