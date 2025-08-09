@@ -62,18 +62,20 @@ class StaticParagraphFormatter extends FormatterBase {
     foreach ($items as $delta => $item) {
       if ($item->entity && $item->entity->bundle() === 'static_paragraph') {
         $paragraph_id = $item->entity->id();
-        
+
         $elements[$delta] = [
           '#type' => 'container',
           '#attributes' => [
             'class' => ['static-paragraph-wrapper'],
             'data-paragraph-id' => $paragraph_id,
           ],
+          // Create paragraphs that render HTML.
+          // From static-content-paragraphs/[ID]/index.html.
           'content' => static_content_type_loader($paragraph_id, 'proxied', 'static-content-paragraphs'),
         ];
       }
       else {
-        // Fallback to default paragraph rendering
+        // Fallback to default paragraph rendering.
         $view_builder = \Drupal::entityTypeManager()->getViewBuilder('paragraph');
         $elements[$delta] = $view_builder->view($item->entity, $this->getSetting('view_mode'), $langcode);
       }

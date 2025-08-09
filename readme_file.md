@@ -1,14 +1,19 @@
 # Static Content Type Module
 
-The Static Content Type module provides a way to author and create content outside of the Drupal environment using any available tools and AI to create it. This module allows you to get off the "Drupal Island" and use modern frontend technologies like React, Vue, Angular, Svelte, etc.
+The Static Content Type module provides a way to author and create content
+outside of the Drupal environment using any available tools and AI to create
+it. This module allows you to get off the "Drupal Island" and use modern
+frontend technologies like React, Vue, Angular, Svelte, etc.
 
 ## Features
 
-- **Static Content Nodes**: Create content pages that render HTML from external files
+- **Static Content Nodes**: Create content pages that render HTML from external
+  files
 - **Static Blocks**: Create blocks that display external HTML content
 - **Static Paragraphs**: Create paragraph entities that render external HTML
 - **Twig Extensions**: Use static content in any Twig template
-- **Single Directory Components (SDC)**: Component-based static content rendering
+- **Single Directory Components (SDC)**: Component-based static content
+  rendering
 - **Multiple Rendering Options**: Proxied, Raw, or iFrame rendering modes
 
 ## Installation
@@ -16,7 +21,8 @@ The Static Content Type module provides a way to author and create content outsi
 1. Copy the module to your `modules/custom/` directory
 2. Enable the module: `drush en static_content_type`
 3. Configure permissions at `/admin/people/permissions`
-4. Configure rendering options at `/admin/config/content/settings/static_content_type`
+4. Configure rendering options at
+   `/admin/config/content/settings/static_content_type`
 
 ## Directory Structure
 
@@ -136,7 +142,8 @@ sites/default/files/static-content-nodes/1234/
 
 ## Permissions
 
-- `administer static content type`: Configure module settings and see detailed error messages
+- `administer static content type`: Configure module settings and see detailed
+  error messages
 
 ## Requirements
 
@@ -152,4 +159,5 @@ sites/default/files/static-content-nodes/1234/
 4. Upload content to the numbered directory
 5. Content is immediately available on your Drupal site
 
-This enables rapid development using modern tools while leveraging Drupal's content management capabilities.
+This enables rapid development using modern tools while leveraging Drupal's
+content management capabilities.

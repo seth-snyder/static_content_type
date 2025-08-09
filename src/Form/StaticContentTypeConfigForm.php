@@ -50,7 +50,7 @@ class StaticContentTypeConfigForm extends ConfigFormBase {
     $form['default_processing'] = [
       '#type' => 'select',
       '#title' => $this->t('Default Processing Type'),
-      '#description' => $this->t('How content should be processed when directory structure doesn\'t specify. Directory precedence: dist → build → raw → proxied → hardened → src → root.'),
+      '#description' => $this->t("How content should be processed when directory structure doesn't specify. Directory precedence: dist → build → raw → proxied → hardened → src → root."),
       '#options' => [
         'hardened' => $this->t('Hardened - Security sanitization + path proxying (Safest)'),
         'proxied' => $this->t('Proxied - Path fixing only (Faster)'),
@@ -68,12 +68,14 @@ class StaticContentTypeConfigForm extends ConfigFormBase {
 
     $form['advanced']['use_drupal_react'] = [
       '#type' => 'checkbox',
-      '#title' => $this->t('Use Drupal\'s Built-in React Library'),
-      '#description' => $this->t('Include Drupal core React library to avoid duplicates when multiple React components are used on a page. Recommended for bundled content.'),
+      '#title' => $this->t("Use Drupal's Built-in React Library"),
+      // Include Drupal core React library to avoid duplicates when multiple
+      // React components are used on a page. Recommended for bundled content.
+      '#description' => $this->t("Include Drupal core React library to avoid duplicates when multiple React components are used on a page. Recommended for bundled content."),
       '#default_value' => $config->get('use_drupal_react') ?: FALSE,
     ];
 
-    // Help section
+    // Help section.
     $form['help'] = [
       '#type' => 'details',
       '#title' => $this->t('Directory Structure Help'),

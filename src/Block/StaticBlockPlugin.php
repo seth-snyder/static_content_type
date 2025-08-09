@@ -72,7 +72,7 @@ class StaticBlockPlugin extends BlockBase implements ContainerFactoryPluginInter
 
     $config = $this->getConfiguration();
 
-    // Get all static block content entities
+    // Get all static block content entities.
     $static_blocks = $this->entityTypeManager
       ->getStorage('block_content')
       ->loadByProperties(['type' => 'static_block']);
