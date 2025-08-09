@@ -1,7 +1,7 @@
 name: 'Static Content Type'
 type: module
 description: 'Provides static content types that can render HTML content from the public files directory.'
-core_version_requirement: ^11
+core_version_requirement: ^11 || ^12
 package: 'Custom'
 dependencies:
   - drupal:node
