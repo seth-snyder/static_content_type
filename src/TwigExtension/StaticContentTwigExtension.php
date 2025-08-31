@@ -21,6 +21,9 @@ class StaticContentTwigExtension extends AbstractExtension {
       new TwigFunction('static_content_raw', [$this, 'staticContentRaw'], [
         'is_safe' => ['html'],
       ]),
+      new TwigFunction('static_content_type_loader_with_precedence', [$this, 'staticContentLoaderWithPrecedence'], [
+        'is_safe' => ['html'],
+      ]),
     ];
   }
 
@@ -54,6 +57,21 @@ class StaticContentTwigExtension extends AbstractExtension {
    */
   public function staticContentRaw($id, $location = 'static-content-nodes') {
     return static_content_type_loader_raw($id, $location);
+  }
+
+  /**
+   * Twig function to load raw static content using directory precedence (returns HTML string).
+   *
+   * @param string|int $id
+   *   The ID of the entity or custom identifier.
+   * @param string $location
+   *   The directory location in public files.
+   *
+   * @return \Twig\Markup
+   *   Raw HTML markup.
+   */
+  public function staticContentLoaderWithPrecedence($id, $location = 'static-content-nodes') {
+    return static_content_type_loader_with_precedence($id, $location);
   }
 
 }

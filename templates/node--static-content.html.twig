@@ -7,6 +7,6 @@
     <h1>{{ node.title.value }}</h1>
   </header>
   <div class="static-content-body">
-    {{ static_content_type_loader(nid, 'hardened', location) }}
+    {{ static_content_type_loader_with_precedence(nid, location) }}
   </div>
 </article>

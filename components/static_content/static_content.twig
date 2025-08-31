@@ -11,7 +11,7 @@
 #}
 {% if id %}
   <div class="static-content-sdc" data-id="{{ id }}" data-location="{{ location }}">
-    {{ static_content_type_loader(id, option, location) }}
+    {{ static_content_type_loader_with_precedence(id, location) }}
   </div>
 {% else %}
   <div class="static-content-sdc-error" style="padding: 20px; border: 1px solid red; background: #ffe6e6;">

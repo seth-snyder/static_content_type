@@ -69,11 +69,11 @@ Use the Twig function in any template:
 
 ```twig
 {# Basic usage #}
-{{ static_content_type_loader('1234', 'proxied', 'static-content-nodes') }}
+{{ static_content_type_loader_with_precedence('1234', 'static-content-nodes') }}
 
 {# In a wrapper div #}
 <div class="content-display">
-  {{ static_content_type_loader('my-content', 'raw', 'static-content-twig') }}
+  {{ static_content_type_loader_with_precedence('my-content', 'static-content-twig') }}
 </div>
 ```
 

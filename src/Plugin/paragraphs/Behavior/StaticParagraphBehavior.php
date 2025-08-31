@@ -28,7 +28,7 @@ class StaticParagraphBehavior extends ParagraphsBehaviorBase {
     $id = $paragraph->id();
 
     if ($id) {
-      $static_content = static_content_type_loader($id, 'proxied', 'static-content-paragraphs');
+      $static_content = static_content_type_loader_with_precedence($id, 'static-content-paragraphs');
       $build['static_content'] = $static_content;
     }
   }

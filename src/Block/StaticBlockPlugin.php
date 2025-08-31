@@ -117,7 +117,7 @@ class StaticBlockPlugin extends BlockBase implements ContainerFactoryPluginInter
       ];
     }
 
-    return static_content_type_loader($block_id, 'proxied', 'static-content-blocks');
+    return static_content_type_loader_with_precedence($block_id, 'static-content-blocks');
   }
 
 }

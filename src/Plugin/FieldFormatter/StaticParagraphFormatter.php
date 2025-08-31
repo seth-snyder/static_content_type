@@ -71,7 +71,7 @@ class StaticParagraphFormatter extends FormatterBase {
           ],
           // Create paragraphs that render HTML.
           // From static-content-paragraphs/[ID]/index.html.
-          'content' => static_content_type_loader($paragraph_id, 'proxied', 'static-content-paragraphs'),
+          'content' => static_content_type_loader_with_precedence($paragraph_id, 'static-content-paragraphs'),
         ];
       }
       else {

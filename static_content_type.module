@@ -5,6 +5,7 @@
  * Contains static_content_type.module.
  */
 
+use Drupal\Component\Serialization\Yaml;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\Display\EntityViewDisplayInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
@@ -176,7 +177,7 @@ function static_content_type_loader_enhanced($id, $processing_type = 'hardened',
 
   // If no file path provided, use the original loader.
   if (!$file_path) {
-    return static_content_type_loader($id, $processing_type, $location);
+    return static_content_type_loader_with_precedence($id, $location);
   }
 
   // Get the content.
@@ -421,6 +422,17 @@ function static_content_type_loader_raw($id, $location = 'static-content-nodes')
     ]);
   }
 
+  // Check for stc.options.yml at the top level of this content ID.
+  $options_file = $base_path . '/stc.options.yml';
+  $options = [];
+  if (file_exists($options_file)) {
+    try {
+      $options = \Drupal\Component\Serialization\Yaml::decode(file_get_contents($options_file));
+    } catch (\Exception $e) {
+      \Drupal::logger('static_content_type')->error('Could not parse stc.options.yml: @error', ['@error' => $e->getMessage()]);
+    }
+  }
+
   foreach ($precedence as $subdir) {
     $check_path = $subdir ? $base_path . '/' . $subdir : $base_path;
     $index_file = $check_path . '/index.html';
@@ -435,20 +447,32 @@ function static_content_type_loader_raw($id, $location = 'static-content-nodes')
           ]);
         }
 
-        // Process based on subdirectory type using same logic as controller.
-        switch ($subdir) {
+        // Check for stc.options.yml overrides
+        $processing_type = !empty($options['processing_type'])
+          ? $options['processing_type']
+          : static_content_type_get_processing_type_for_subdir($subdir ?: 'root');
+
+        // If render_method is set to 'iframe', return iframe render array.
+        if (!empty($options['render_method']) && $options['render_method'] === 'iframe') {
+          $base_url = \Drupal::request()->getSchemeAndHttpHost();
+          $iframe_url = $base_url . '/sites/default/files/' . $location . '/' . $id . ($subdir ? '/' . $subdir : '') . '/index.html';
+          // Return a render array, not Twig markup
+          return [
+            '#theme' => 'static_content_iframe',
+            '#src' => $iframe_url,
+            '#id' => $id,
+            '#location' => $location,
+          ];
+        }
+
+        // Process based on effective processing_type (now option-aware)
+        switch ($processing_type) {
           case 'raw':
-            if (defined('STATIC_CONTENT_TYPE_DEBUG')) {
-              \Drupal::logger('static_content_type')->notice("Twig raw: No processing for raw directory");
-            }
             // No processing for raw - this is why images don't work in raw.
             break;
 
           case 'proxied':
           case 'src':
-            if (defined('STATIC_CONTENT_TYPE_DEBUG')) {
-              \Drupal::logger('static_content_type')->notice("Twig raw: Proxied processing for @subdir", ['@subdir' => $subdir]);
-            }
             $content = static_content_type_process_proxied_content_enhanced($content, $location, $id, $subdir);
             break;
 
@@ -456,12 +480,6 @@ function static_content_type_loader_raw($id, $location = 'static-content-nodes')
           case 'build':
             // Use config default for bundled content.
             $default_processing = $config->get('default_processing') ?: 'hardened';
-            if (defined('STATIC_CONTENT_TYPE_DEBUG')) {
-              \Drupal::logger('static_content_type')->notice("Twig raw: Bundled content using @processing", [
-                '@processing' => $default_processing,
-              ]);
-            }
-
             if ($default_processing === 'hardened') {
               $content = static_content_type_process_hardened_content_enhanced($content, $location, $id, $subdir);
             }
@@ -472,14 +490,8 @@ function static_content_type_loader_raw($id, $location = 'static-content-nodes')
             break;
 
           case 'hardened':
-            // It'S root.
-          case '':
+          case 'root':
           default:
-            if (defined('STATIC_CONTENT_TYPE_DEBUG')) {
-              \Drupal::logger('static_content_type')->notice("Twig raw: Hardened processing for @subdir", [
-                '@subdir' => $subdir ?: 'root',
-              ]);
-            }
             $content = static_content_type_process_hardened_content_enhanced($content, $location, $id, $subdir);
             break;
         }
@@ -581,7 +593,7 @@ function static_content_type_loader_enhanced_v2($id, $processing_type = 'hardene
 
   // If no file path provided, use the original loader.
   if (!$file_path) {
-    return static_content_type_loader($id, $processing_type, $location);
+    return static_content_type_loader_with_precedence($id, $location);
   }
 
   // Get the content.
@@ -868,7 +880,7 @@ function static_content_type_entity_view_alter(array &$build, EntityInterface $e
 /**
  * A helper function to use helpful errors.
  */
-function static_content_type_loader_with_precedence($id, $location) {
+ function static_content_type_loader_with_precedence($id, $location) {
   $file_system = \Drupal::service('file_system');
   $public_path = $file_system->realpath('public://');
   $base_path = $public_path . '/' . $location . '/' . $id;
@@ -883,6 +895,17 @@ function static_content_type_loader_with_precedence($id, $location) {
     ]);
   }
 
+  // Check for stc.options.yml at the top level of this content ID.
+  $options_file = $base_path . '/stc.options.yml';
+  $options = [];
+  if (file_exists($options_file)) {
+    try {
+      $options = \Drupal\Component\Serialization\Yaml::decode(file_get_contents($options_file));
+    } catch (\Exception $e) {
+      \Drupal::logger('static_content_type')->error('Could not parse stc.options.yml: @error', ['@error' => $e->getMessage()]);
+    }
+  }
+
   foreach ($precedence as $subdir) {
     $check_path = $subdir ? $base_path . '/' . $subdir : $base_path;
     $index_file = $check_path . '/index.html';
@@ -894,8 +917,22 @@ function static_content_type_loader_with_precedence($id, $location) {
         'relative_path' => $location . '/' . $id . ($subdir ? '/' . $subdir : '') . '/index.html',
       ];
 
-      // Get processing type.
-      $processing_type = static_content_type_get_processing_type_for_subdir($file_info['subdirectory']);
+      // If render_method is set to 'iframe', return iframe render array.
+      if (!empty($options['render_method']) && $options['render_method'] === 'iframe') {
+        $base_url = \Drupal::request()->getSchemeAndHttpHost();
+        $iframe_url = $base_url . '/sites/default/files/' . $file_info['relative_path'];
+        return [
+          '#theme' => 'static_content_iframe',
+          '#src' => $iframe_url,
+          '#id' => $id,
+          '#location' => $location,
+        ];
+      }
+
+      // Get processing type (now also considers stc.options.yml).
+      $processing_type = !empty($options['processing_type'])
+        ? $options['processing_type']
+        : static_content_type_get_processing_type_for_subdir($file_info['subdirectory']);
 
       if (defined('STATIC_CONTENT_TYPE_DEBUG')) {
         \Drupal::logger('static_content_type')->notice("Helper function loading @id from @subdir with @type processing", [
@@ -904,9 +941,7 @@ function static_content_type_loader_with_precedence($id, $location) {
           '@type' => $processing_type,
         ]);
       }
-
-      // Use enhanced loader with subdirectory info.
-      // Pass subdirectory for path processing.
+      
       return static_content_type_loader_enhanced_v2(
         $id,
         $processing_type,
@@ -925,6 +960,7 @@ function static_content_type_loader_with_precedence($id, $location) {
     ]);
   }
 
+  // No content found - return helpful error.
   return static_content_type_create_helpful_error($id, $location);
 }
 
@@ -933,22 +969,18 @@ function static_content_type_loader_with_precedence($id, $location) {
  */
 function static_content_type_get_processing_type_for_subdir($subdirectory) {
   $config = \Drupal::config('static_content_type.settings');
-
   switch ($subdirectory) {
     case 'raw':
       return 'raw';
-
     case 'proxied':
     case 'src':
       return 'proxied';
-
     case 'dist':
     case 'build':
-      // Use config default for bundled content.
-      return $config->get('default_processing') ?: 'hardened';
-
-    case 'hardened':
     case 'root':
+    case '':
+      return $config->get('default_processing') ?: 'hardened';
+    case 'hardened':
     default:
       return 'hardened';
   }
