@@ -997,3 +997,17 @@ function static_content_type_create_helpful_error($id, $location) {
     '#allowed_tags' => ['div', 'strong', 'br'],
   ];
 }
+
+function static_content_type_theme_suggestions_node_alter(array &$suggestions, array $variables) {
+  $node = $variables['elements']['#node'] ?? null;
+  if ($node && $node->bundle() === 'static_content') {
+    $suggestions[] = 'node__static_content';
+  }
+}
+
+function static_content_type_preprocess_node(&$variables) {
+  if ($variables['node']->bundle() === 'static_content') {
+    $variables['nid'] = $variables['node']->id();
+    $variables['location'] = 'static-content-nodes';
+  }
+}

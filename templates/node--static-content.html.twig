@@ -1,0 +1,12 @@
+{#
+  Template for Static Content nodes at /node/{nid}
+  Shows static content from static-content-nodes/[nid]/index.html
+#}
+<article class="static-content-node" data-id="{{ nid }}">
+  <header>
+    <h1>{{ node.title.value }}</h1>
+  </header>
+  <div class="static-content-body">
+    {{ static_content_type_loader(nid, 'hardened', location) }}
+  </div>
+</article>
